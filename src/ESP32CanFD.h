@@ -119,6 +119,9 @@ public:
   uint32_t getBusErrorCount() {
     return _bus_error_count;
   }
+  uint32_t getRxDropCount() {
+    return _rx_drop_count;
+  }
 
   // エラーカウンタの取得 (TEC:送信エラー, REC:受信エラー)
   uint16_t getTEC();
@@ -130,12 +133,13 @@ private:
   bool _is_fd_enabled;
   volatile twai_error_state_t _last_state = TWAI_ERROR_ACTIVE;
   volatile uint32_t _bus_error_count = 0;
+  volatile uint32_t _rx_drop_count = 0;
 
   // 排他制御用スピンロック (ISRとTask間の変数保護)
   portMUX_TYPE _mux = portMUX_INITIALIZER_UNLOCKED;
 
   // 送信バッファと一時情報
-  static const size_t TX_RING_SIZE = 512;
+  static const size_t TX_RING_SIZE = 1024;
   uint8_t _txRingBuffer[TX_RING_SIZE];
   size_t _txBufferIdx;
   size_t _head = 0;

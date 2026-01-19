@@ -2,14 +2,14 @@
 #include <esp_log.h>
 
 static const char* TAG = "ESP32CanFD";
-#define RX_QUEUE_SIZE 16
-#define TX_QUEUE_SIZE 16
+#define RX_QUEUE_SIZE 32
+#define TX_QUEUE_SIZE 32
 #define MAX_DATA_SIZE 64
 
 // ISRからメインメモリへデータを渡すための構造体
 typedef struct {
   twai_frame_header_t header;
-  uint8_t data[MAX_DATA_SIZE];
+  uint8_t data[MAX_DATA_SIZE];  // 固定長で持ってるので無駄...キューに入れる時もコピーしちゃう
 } rx_queue_item_t;
 
 // --- ISRコールバック群 ---
@@ -47,6 +47,8 @@ bool IRAM_ATTR app_twai_rx_done_callback(twai_node_handle_t handle, const twai_r
     BaseType_t high_task_awoken = pdFALSE;
     xQueueSendFromISR(self->_rx_queue, &item, &high_task_awoken);
     return (high_task_awoken == pdTRUE);
+  } else {
+    self->_rx_drop_count++; // 溢れた！
   }
   return false;
 }
