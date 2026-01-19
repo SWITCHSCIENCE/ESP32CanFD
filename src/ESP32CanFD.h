@@ -138,6 +138,12 @@ private:
   // 排他制御用スピンロック (ISRとTask間の変数保護)
   portMUX_TYPE _mux = portMUX_INITIALIZER_UNLOCKED;
 
+  // 受信バッファと一時情報
+  static const size_t RX_RING_SIZE = 1024;
+  uint8_t _rxRingBuffer[RX_RING_SIZE];
+  size_t _rx_head = 0;
+  uint8_t *_rxDataPtr;
+
   // 送信バッファと一時情報
   static const size_t TX_RING_SIZE = 1024;
   uint8_t _txRingBuffer[TX_RING_SIZE];

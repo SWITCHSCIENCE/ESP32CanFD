@@ -9,8 +9,8 @@ static const char* TAG = "ESP32CanFD";
 // ISRからメインメモリへデータを渡すための構造体
 typedef struct {
   twai_frame_header_t header;
-  uint8_t data[MAX_DATA_SIZE];  // 固定長で持ってるので無駄...キューに入れる時もコピーしちゃう
-} rx_queue_item_t;
+  size_t offset; // _rxRingBuffer 内の開始位置
+} rx_meta_t;
 
 // --- ISRコールバック群 ---
 
@@ -37,18 +37,26 @@ bool IRAM_ATTR app_twai_rx_done_callback(twai_node_handle_t handle, const twai_r
   ESP32CanFD* self = (ESP32CanFD*)user_ctx;
   if (!self || !self->_rx_queue) return false;
 
-  rx_queue_item_t item;
+  // ToDo readで_rxRingBufferの読み取りが間に合わなかった場合、上書きされ、ユーザーは知る余地はない。
+  rx_meta_t meta;
   twai_frame_t rx_frame;
-  rx_frame.buffer = item.data;
-  rx_frame.buffer_len = sizeof(item.data);
+  rx_frame.buffer = &self->_rxRingBuffer[self->_rx_head];
+  rx_frame.buffer_len = MAX_DATA_SIZE;
 
   if (twai_node_receive_from_isr(handle, &rx_frame) == ESP_OK) {
-    item.header = rx_frame.header;
+    meta.header = rx_frame.header;
+    meta.offset = self->_rx_head;
     BaseType_t high_task_awoken = pdFALSE;
-    xQueueSendFromISR(self->_rx_queue, &item, &high_task_awoken);
+    if (xQueueSendFromISR(self->_rx_queue, &meta, &high_task_awoken) == pdTRUE) {
+        // 書き込み位置を更新（FDの物理長に合わせて進める）
+        size_t len = rx_frame.header.fdf ? twaifd_dlc2len(rx_frame.header.dlc) : rx_frame.header.dlc;
+        size_t last = self->_rx_head;
+        self->_rx_head = (self->_rx_head + len + 3) & ~3; // 4バイトアライメント
+        if (self->_rx_head > self->RX_RING_SIZE - MAX_DATA_SIZE) self->_rx_head = 0; // ラップアラウンド
+    } else {
+      self->_rx_drop_count++; // 溢れた！
+    }
     return (high_task_awoken == pdTRUE);
-  } else {
-    self->_rx_drop_count++; // 溢れた！
   }
   return false;
 }
@@ -113,7 +121,7 @@ bool ESP32CanFD::begin() {
   _head = 0;
   _used_count = 0;
   _tx_len_queue = xQueueCreate(TX_QUEUE_SIZE, sizeof(size_t));
-  _rx_queue = xQueueCreate(RX_QUEUE_SIZE, sizeof(rx_queue_item_t));
+  _rx_queue = xQueueCreate(RX_QUEUE_SIZE, sizeof(rx_meta_t));
   _tx_buf_sem = xSemaphoreCreateBinary();
 
   if (!_tx_len_queue || !_rx_queue || !_tx_buf_sem) return false;
@@ -324,11 +332,11 @@ int ESP32CanFD::request(uint32_t id, uint8_t dlc, bool extended) {
 
 int ESP32CanFD::parsePacket() {
   if (!_rx_queue) return 0;
-  rx_queue_item_t item;
-  if (xQueueReceive(_rx_queue, &item, 0) == pdTRUE) {
-    _rxHeader = item.header;
+  rx_meta_t meta;
+  if (xQueueReceive(_rx_queue, &meta, 0) == pdTRUE) {
+    _rxHeader = meta.header;
     _rxLength = _rxHeader.fdf ? twaifd_dlc2len(_rxHeader.dlc) : min((int)_rxHeader.dlc, 8);
-    memcpy(_rxBuffer, item.data, _rxLength);
+    _rxDataPtr = &_rxRingBuffer[meta.offset];
     _rxBufferIdx = 0;
     return _rxLength;
   }
@@ -339,10 +347,11 @@ int ESP32CanFD::available() {
   return _rxLength - _rxBufferIdx;
 }
 int ESP32CanFD::read() {
-  return (_rxBufferIdx < _rxLength) ? _rxBuffer[_rxBufferIdx++] : -1;
+  // ポインタ経由で直接読む
+  return (_rxBufferIdx < _rxLength) ? _rxDataPtr[_rxBufferIdx++] : -1;
 }
 int ESP32CanFD::peek() {
-  return (_rxBufferIdx < _rxLength) ? _rxBuffer[_rxBufferIdx] : -1;
+  return (_rxBufferIdx < _rxLength) ? _rxDataPtr[_rxBufferIdx] : -1;
 }
 
 uint32_t ESP32CanFD::packetId() {
