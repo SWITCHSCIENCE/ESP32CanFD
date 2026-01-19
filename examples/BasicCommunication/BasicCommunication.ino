@@ -5,7 +5,8 @@ ESP32CanFD CANFD;
 
 void setup() {
   Serial.begin(115200);
-  while(!Serial);
+  while (!Serial)
+    ;
 
   // 1. GPIOピンの設定 (RX, TX)
   // チップに合わせて適切なピン番号に変更してください
@@ -20,7 +21,8 @@ void setup() {
   // 3. ドライバ開始
   if (!CANFD.begin()) {
     Serial.println("Failed to initialize CAN FD!");
-    while (1);
+    while (1)
+      ;
   }
 
   Serial.println("CAN FD Initialized.");
@@ -35,9 +37,9 @@ void loop() {
     // ID 0x123 でパケット開始 (デフォルトで29bit Extended ID)
     // .standard() を呼べば 11bit ID になります
     CANFD.beginPacket(0x12345)
-         .fd(true)  // CAN-FD形式、BRS(速度切替)有効
-         .write(0xAA);
-    
+      .fd(true)  // CAN-FD形式、BRS(速度切替)有効
+      .write(0xAA);
+
     const char* msg = "ESP32-FD";
     CANFD.write((uint8_t*)msg, strlen(msg));
 
@@ -55,7 +57,7 @@ void loop() {
     if (CANFD.packetFdf()) Serial.print("CAN-FD ");
     else Serial.print("Classic ");
 
-    Serial.printf("Packet: ID=0x%X, DLC=%d, Size=%d\n", 
+    Serial.printf("Packet: ID=0x%X, DLC=%d, Size=%d\n",
                   CANFD.packetId(), CANFD.packetDlc(), packetSize);
 
     Serial.print("Data: ");
