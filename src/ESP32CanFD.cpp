@@ -2,14 +2,14 @@
 #include <esp_log.h>
 
 static const char* TAG = "ESP32CanFD";
-#define RX_QUEUE_SIZE 32
-#define TX_QUEUE_SIZE 32
+#define RX_QUEUE_SIZE 64
+#define TX_QUEUE_SIZE 64
 #define MAX_DATA_SIZE 64
 
 // ISRからメインメモリへデータを渡すための構造体
 typedef struct {
-  twai_frame_header_t header;
-  size_t offset; // _rxRingBuffer 内の開始位置
+ TWAI_FRAME_HEADER header;
+ size_t offset; // _rxRingBuffer 内の開始位置
 } rx_meta_t;
 
 // --- ISRコールバック群 ---
@@ -44,15 +44,20 @@ bool IRAM_ATTR app_twai_rx_done_callback(twai_node_handle_t handle, const twai_r
   rx_frame.buffer_len = MAX_DATA_SIZE;
 
   if (twai_node_receive_from_isr(handle, &rx_frame) == ESP_OK) {
-    meta.header = rx_frame.header;
+    meta.header.id  = rx_frame.header.id;
+    meta.header.dlc = rx_frame.header.dlc;
+    meta.header.ide = rx_frame.header.ide;
+    meta.header.rtr = rx_frame.header.rtr;
+    meta.header.fdf = rx_frame.header.fdf;
+    meta.header.brs = rx_frame.header.brs;
+    meta.header.esi = rx_frame.header.esi;
     meta.offset = self->_rx_head;
     BaseType_t high_task_awoken = pdFALSE;
     if (xQueueSendFromISR(self->_rx_queue, &meta, &high_task_awoken) == pdTRUE) {
-        // 書き込み位置を更新（FDの物理長に合わせて進める）
-        size_t len = rx_frame.header.fdf ? twaifd_dlc2len(rx_frame.header.dlc) : rx_frame.header.dlc;
-        size_t last = self->_rx_head;
-        self->_rx_head = (self->_rx_head + len + 3) & ~3; // 4バイトアライメント
-        if (self->_rx_head > self->RX_RING_SIZE - MAX_DATA_SIZE) self->_rx_head = 0; // ラップアラウンド
+      // 書き込み位置を更新（FDの物理長に合わせて進める）
+      size_t len = rx_frame.header.fdf ? twaifd_dlc2len(rx_frame.header.dlc) : rx_frame.header.dlc;
+      self->_rx_head = (self->_rx_head + len + 3) & ~3; // 4バイトアライメント
+      if (self->_rx_head > self->RX_RING_SIZE - MAX_DATA_SIZE) self->_rx_head = 0; // ラップアラウンド
     } else {
       self->_rx_drop_count++; // 溢れた！
     }
@@ -338,7 +343,7 @@ int ESP32CanFD::parsePacket() {
     _rxLength = _rxHeader.fdf ? twaifd_dlc2len(_rxHeader.dlc) : min((int)_rxHeader.dlc, 8);
     _rxDataPtr = &_rxRingBuffer[meta.offset];
     _rxBufferIdx = 0;
-    return _rxLength;
+    return _rxLength ? _rxLength : _rxHeader.rtr;
   }
   return 0;
 }

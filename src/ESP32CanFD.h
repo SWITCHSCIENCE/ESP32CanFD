@@ -10,6 +10,19 @@
 #define CAN_FMT_CLASSIC 0  // Classic CAN強制
 #define CAN_FMT_FD 1       // CAN FD強制
 
+typedef struct twai_frame_header_lite_t {
+  uint32_t id;        /* 11bit or 29bit CAN ID */
+  uint16_t dlc;       /* 0–64 */
+  uint16_t ide : 1;   /* Extended ID */
+  uint16_t rtr : 1;   /* Remote frame */
+  uint16_t fdf : 1;   /* CAN FD frame */
+  uint16_t brs : 1;   /* Bit Rate Switch */
+  uint16_t esi : 1;   /* Error State Indicator */
+};
+
+// #define TWAI_FRAME_HEADER twai_frame_header_t
+#define TWAI_FRAME_HEADER twai_frame_header_lite_t
+
 class ESP32CanFD : public Stream {
 public:
   ESP32CanFD();
@@ -163,10 +176,9 @@ private:
 
   // 受信バッファと情報
   QueueHandle_t _rx_queue;
-  uint8_t _rxBuffer[64];
   size_t _rxBufferIdx;
   size_t _rxLength;
-  twai_frame_header_t _rxHeader;
+  TWAI_FRAME_HEADER _rxHeader;
 
   // ISRから呼び出されるフレンド関数
   friend bool IRAM_ATTR app_twai_tx_done_callback(twai_node_handle_t handle, const twai_tx_done_event_data_t* edata, void* user_ctx);
