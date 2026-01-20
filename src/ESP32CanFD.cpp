@@ -181,19 +181,28 @@ bool ESP32CanFD::recover() {
 bool ESP32CanFD::setFilter(uint8_t filterId, uint32_t id, uint32_t mask, bool isExtended) {
   if (!_node_handle) return false;
   twai_mask_filter_config_t cfg = { .id = id, .mask = mask, .is_ext = isExtended };
-  return (twai_node_config_mask_filter(_node_handle, filterId, &cfg) == ESP_OK);
+  twai_node_disable(_node_handle);
+  esp_err_t err = twai_node_config_mask_filter(_node_handle, filterId, &cfg);
+  twai_node_enable(_node_handle);
+  return err == ESP_OK;
 }
 
 bool ESP32CanFD::setDualFilter(uint8_t filterId, uint32_t id1, uint32_t mask1, uint32_t id2, uint32_t mask2, bool isExtended) {
   if (!_node_handle) return false;
   twai_mask_filter_config_t cfg = twai_make_dual_filter(id1, mask1, id2, mask2, isExtended);
-  return (twai_node_config_mask_filter(_node_handle, filterId, &cfg) == ESP_OK);
+  twai_node_disable(_node_handle);
+  esp_err_t err = twai_node_config_mask_filter(_node_handle, filterId, &cfg);
+  twai_node_enable(_node_handle);
+  return err == ESP_OK;
 }
 
 bool ESP32CanFD::setRangeFilter(uint8_t filterId, uint32_t lowId, uint32_t highId, bool isExtended) {
   if (!_node_handle) return false;
   twai_range_filter_config_t cfg = { .range_low = lowId, .range_high = highId, .is_ext = isExtended };
-  return (twai_node_config_range_filter(_node_handle, filterId, &cfg) == ESP_OK);
+  twai_node_disable(_node_handle);
+  esp_err_t err = twai_node_config_range_filter(_node_handle, filterId, &cfg);
+  twai_node_enable(_node_handle);
+  return err == ESP_OK;
 }
 
 // --- 送信処理 ---
