@@ -1,0 +1,43 @@
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+ESP32CanFD	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+setPins	KEYWORD2
+setBaudRate	KEYWORD2
+setModeFlags	KEYWORD2
+begin	KEYWORD2
+end	KEYWORD2
+recover	KEYWORD2
+beginPacket	KEYWORD2
+endPacket	KEYWORD2
+standard	KEYWORD2
+extended	KEYWORD2
+fd	KEYWORD2
+classic	KEYWORD2
+request	KEYWORD2
+parsePacket	KEYWORD2
+packetId	KEYWORD2
+packetExtended	KEYWORD2
+packetRtr	KEYWORD2
+packetFdf	KEYWORD2
+packetBrs	KEYWORD2
+packetDlc	KEYWORD2
+setFilter	KEYWORD2
+setDualFilter	KEYWORD2
+setRangeFilter	KEYWORD2
+isBusOff	KEYWORD2
+state	KEYWORD2
+getBusErrorCount	KEYWORD2
+getTEC	KEYWORD2
+getREC	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+CAN_FMT_AUTO	LITERAL1
+CAN_FMT_CLASSIC	LITERAL1
+CAN_FMT_FD	LITERAL1
