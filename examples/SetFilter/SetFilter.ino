@@ -64,9 +64,13 @@ void loop() {
   // フィルタを通過したパケットのみがここに届く
   int packetSize = CANFD.parsePacket();
   if (packetSize) {
-    Serial.printf("Received ID: 0x%03X, Size: %d\n", CANFD.packetId(), packetSize);
+    Serial.print("Received ");
+    if (CANFD.packetFdf()) Serial.print("CAN-FD ");
+    else Serial.print("Classic ");
 
-    // データ読み取り
+    Serial.printf("Packet: ID=0x%X, DLC=%d, Size=%d\n",
+                  CANFD.packetId(), CANFD.packetDlc(), packetSize);
+
     Serial.print("Data: ");
     while (CANFD.available()) {
       uint8_t b = CANFD.read();
