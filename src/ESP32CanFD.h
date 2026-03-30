@@ -98,16 +98,29 @@ public:
   /**
    * マスクフィルタの設定
    * @param filterId 0〜(SOC_TWAI_MASK_FILTER_NUM-1)
+   *
+   * SOCごとの対応:
+   * - ESP32C5 / ESP32H4: SOC_TWAI_MASK_FILTER_NUM=3 (filterId=0,1,2)
+   * - その他: SOC_TWAI_MASK_FILTER_NUM=1 (filterId=0のみ)
    */
   bool setFilterMask(uint8_t filterId, uint32_t id, uint32_t mask, bool isExtended = false);
 
   /**
    * 2つのIDを個別に通すフィルタの設定 (Dual Filterモード)
+   *
+   * 注記:
+   * - ESP32C5 は現状 setFilterDual 未対応 (Dualモードのハードウェアサポート無し)
+   * - その他のチップでは動作する場合あり。ただし mask filter 用の filterId 制限は上記と共通
    */
   bool setFilterDual(uint8_t filterId, uint32_t id1, uint32_t mask1, uint32_t id2, uint32_t mask2, bool isExtended = false);
 
   /**
    * 指定したID範囲を通すフィルタの設定 (Range Filter)
+   * @param filterId 0〜(SOC_TWAI_RANGE_FILTER_NUM-1)
+   *
+   * SOCごとの対応:
+   * - ESP32C5 / ESP32H4: SOC_TWAI_RANGE_FILTER_NUM=1 (filterId=0のみ)
+   * - その他: SOC_TWAI_RANGE_FILTER_NUM=0 (非対応)
    */
   bool setFilterRange(uint8_t filterId, uint32_t lowId, uint32_t highId, bool isExtended = false);
 
