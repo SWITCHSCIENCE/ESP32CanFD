@@ -221,7 +221,7 @@ ESP32CanFD& ESP32CanFD::beginPacket(uint32_t id) {
   _txPacketInfo.id = id;
   _txPacketInfo.format = CAN_FMT_AUTO;
   _txPacketInfo.brs = _is_fd_enabled;  // FD有効時はデフォルトで高速化(BRS)を許可
-  _txPacketInfo.extended = true;       // 現代的な用途に合わせExtended(29bit)をデフォルト化
+  _txPacketInfo.extended = id > 0x7FF; // 通常は標準ID(11bit)を使い、ID>0x7FFなら拡張IDへ
   _txBufferIdx = 0;
   return *this;
 }
@@ -265,8 +265,7 @@ int ESP32CanFD::endPacket() {
 
   twai_frame_t tx_msg = {};
   tx_msg.header.id = _txPacketInfo.id;
-  // IDが11bit上限を超えている場合は、強制的にExtended
-  tx_msg.header.ide = (_txPacketInfo.id > 0x7FF) ? true : _txPacketInfo.extended;
+  tx_msg.header.ide = _txPacketInfo.extended;
   tx_msg.buffer = &_txRingBuffer[_head];
 
   bool use_fd = false;

@@ -61,7 +61,7 @@ public:
 
   /**
    * 送信パケットの構築開始
-   * デフォルト設定: Extended(29bit), FD有効ならデータ長に応じAUTO切替, BRS有効
+   * デフォルト設定: Standard(11bit), ID>0x7FFならExtended(29bit), FD有効ならデータ長に応じAUTO切替, BRS有効
    * @param id CAN ID
    * @return ESP32CanFD& 自身を返すことでメソッドチェーンを可能にする
    */
