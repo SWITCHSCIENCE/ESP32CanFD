@@ -22,7 +22,7 @@ bool IRAM_ATTR app_twai_tx_done_callback(twai_node_handle_t handle, const twai_t
     if (xQueueReceiveFromISR(self->_tx_len_queue, &footprint, NULL) == pdTRUE) {
       // クリティカルセクションで保護して空き容量を戻す
       portENTER_CRITICAL_ISR(&self->_mux);
-      self->_used_count -= footprint;
+      self->_txUsed -= footprint;
       portEXIT_CRITICAL_ISR(&self->_mux);
 
       BaseType_t high_task_awoken = pdFALSE;
@@ -44,13 +44,7 @@ bool IRAM_ATTR app_twai_rx_done_callback(twai_node_handle_t handle, const twai_r
   rx_frame.buffer_len = MAX_DATA_SIZE;
 
   if (twai_node_receive_from_isr(handle, &rx_frame) == ESP_OK) {
-    meta.header.id  = rx_frame.header.id;
-    meta.header.dlc = rx_frame.header.dlc;
-    meta.header.ide = rx_frame.header.ide;
-    meta.header.rtr = rx_frame.header.rtr;
-    meta.header.fdf = rx_frame.header.fdf;
-    meta.header.brs = rx_frame.header.brs;
-    meta.header.esi = rx_frame.header.esi;
+    meta.header = self->to_lite(rx_frame.header);
     meta.offset = (uint16_t)self->_rx_head;
     BaseType_t high_task_awoken = pdFALSE;
     if (xQueueSendFromISR(self->_rx_queue, &meta, &high_task_awoken) == pdTRUE) {
@@ -123,8 +117,8 @@ void ESP32CanFD::setModeFlags(bool selfTest, bool listenOnly, bool loopback) {
 bool ESP32CanFD::begin() {
   if (_node_handle != NULL) return true;
 
-  _head = 0;
-  _used_count = 0;
+  _txHead = 0;
+  _txUsed = 0;
   _tx_len_queue = xQueueCreate(TX_QUEUE_SIZE, sizeof(size_t));
   _rx_queue = xQueueCreate(RX_QUEUE_SIZE, sizeof(rx_meta_t));
   _tx_buf_sem = xSemaphoreCreateBinary();
@@ -211,43 +205,46 @@ ESP32CanFD& ESP32CanFD::beginPacket(uint32_t id) {
   // バッファに空きが出るまで待機
   while (true) {
     portENTER_CRITICAL(&_mux);
-    size_t current_used = _used_count;
+    size_t current_used = _txUsed;
     portEXIT_CRITICAL(&_mux);
 
     if (current_used + MAX_DATA_SIZE <= TX_RING_SIZE) break;
     xSemaphoreTake(_tx_buf_sem, pdMS_TO_TICKS(50));
   }
 
-  _txPacketInfo.id = id;
-  _txPacketInfo.format = CAN_FMT_AUTO;
-  _txPacketInfo.brs = _is_fd_enabled;  // FD有効時はデフォルトで高速化(BRS)を許可
-  _txPacketInfo.extended = id > 0x7FF; // 通常は標準ID(11bit)を使い、ID>0x7FFなら拡張IDへ
+  _txHeader.id = id;
+  _txHeader.fdf = _is_fd_enabled ? 1 : 0;
+  _txHeader.brs = _is_fd_enabled;  // FD有効時はデフォルトで高速化(BRS)を許可
+  _txHeader.ide = id > 0x7FF; // 通常は標準ID(11bit)を使い、ID>0x7FFなら拡張IDへ
+  _txHeader.rtr = 0;
+  _txHeader.esi = 0;
+  _txHeader.dlc = 0;
   _txBufferIdx = 0;
   return *this;
 }
 
 ESP32CanFD& ESP32CanFD::standard() {
-  if (_txPacketInfo.id <= 0x7FF) _txPacketInfo.extended = false;
+  if (_txHeader.id <= 0x7FF) _txHeader.ide = false;
   return *this;
 }
 ESP32CanFD& ESP32CanFD::extended() {
-  _txPacketInfo.extended = true;
+  _txHeader.ide = true;
   return *this;
 }
 ESP32CanFD& ESP32CanFD::fd(bool brs) {
-  _txPacketInfo.format = CAN_FMT_FD;
-  _txPacketInfo.brs = brs;
+  _txHeader.fdf = 1;
+  _txHeader.brs = brs;
   return *this;
 }
 ESP32CanFD& ESP32CanFD::classic() {
-  _txPacketInfo.format = CAN_FMT_CLASSIC;
-  _txPacketInfo.brs = false;
+  _txHeader.fdf = 0;
+  _txHeader.brs = false;
   return *this;
 }
 
 size_t ESP32CanFD::write(uint8_t byte) {
   if (_txBufferIdx < MAX_DATA_SIZE) {
-    _txRingBuffer[_head + _txBufferIdx++] = byte;
+    _txRingBuffer[_txHead + _txBufferIdx++] = byte;
     return 1;
   }
   return 0;
@@ -255,7 +252,7 @@ size_t ESP32CanFD::write(uint8_t byte) {
 
 size_t ESP32CanFD::write(const uint8_t* buffer, size_t size) {
   size_t to_write = min(size, (size_t)(MAX_DATA_SIZE - _txBufferIdx));
-  memcpy(&_txRingBuffer[_head + _txBufferIdx], buffer, to_write);
+  memcpy(&_txRingBuffer[_txHead + _txBufferIdx], buffer, to_write);
   _txBufferIdx += to_write;
   return to_write;
 }
@@ -264,29 +261,17 @@ int ESP32CanFD::endPacket() {
   if (!_node_handle) return 0;
 
   twai_frame_t tx_msg = {};
-  tx_msg.header.id = _txPacketInfo.id;
-  tx_msg.header.ide = _txPacketInfo.extended;
-  tx_msg.buffer = &_txRingBuffer[_head];
+  tx_msg.header = from_lite(_txHeader);
+  tx_msg.buffer = &_txRingBuffer[_txHead];
 
-  bool use_fd = false;
-  if (_is_fd_enabled) {
-    // 条件: フォーマット指定がFD、またはAUTOかつ8バイト超過
-    if (_txPacketInfo.format == CAN_FMT_FD || (_txPacketInfo.format == CAN_FMT_AUTO && _txBufferIdx > 8)) {
-      use_fd = true;
-    }
-  }
-
-  if (use_fd) {
-    tx_msg.header.fdf = 1;
-    tx_msg.header.brs = _txPacketInfo.brs;
+  if (tx_msg.header.fdf) {
     // データ長からDLC定数(0~15)を算出
     tx_msg.header.dlc = twaifd_len2dlc(_txBufferIdx);
     // buffer_lenはDLCが表す物理的な長さ(例:13バイトなら16)と一致させる
     tx_msg.buffer_len = twaifd_dlc2len(tx_msg.header.dlc);
-
     // フレーム長を合わせるためのゼロパディング
     if (tx_msg.buffer_len > _txBufferIdx) {
-      memset(&_txRingBuffer[_head + _txBufferIdx], 0, tx_msg.buffer_len - _txBufferIdx);
+      memset(&_txRingBuffer[_txHead + _txBufferIdx], 0, tx_msg.buffer_len - _txBufferIdx);
     }
   } else {
     // Classic CAN: 8バイトが上限
@@ -301,7 +286,7 @@ int ESP32CanFD::endPacket() {
   if (twai_node_transmit(_node_handle, &tx_msg, 0) == ESP_OK) {
     // 次のパケット開始位置を4バイト境界に揃えるため、占有サイズを切り上げる
     size_t footprint = (tx_msg.buffer_len + 3) & ~3;
-    size_t next_head = _head + footprint;
+    size_t next_head = _txHead + footprint;
     // ラップアラウンド判定: 次の最大フレーム(64)が入る余地がない場合
     if (TX_RING_SIZE - next_head < 64) {
       // 末尾の隙間を今回の占有分に加算
@@ -309,8 +294,8 @@ int ESP32CanFD::endPacket() {
       next_head = 0;
     }
     xQueueSendFromISR(_tx_len_queue, &footprint, NULL);
-    _used_count += footprint;
-    _head = next_head;
+    _txUsed += footprint;
+    _txHead = next_head;
     result = 1;
   }
   portEXIT_CRITICAL(&_mux);
@@ -373,4 +358,32 @@ uint16_t ESP32CanFD::getREC() {
   twai_node_status_t status;
   if (_node_handle && twai_node_get_info(_node_handle, &status, NULL) == ESP_OK) return status.rx_error_count;
   return 0;
+}
+
+// --- ヘッダ変換関数 ---
+
+TWAI_FRAME_HEADER ESP32CanFD::to_lite(const twai_frame_header_t& header) {
+  TWAI_FRAME_HEADER lite;
+  lite.id = header.id;
+  lite.dlc = header.dlc;
+  lite.ide = header.ide;
+  lite.rtr = header.rtr;
+  lite.fdf = header.fdf;
+  lite.brs = header.brs;
+  lite.esi = header.esi;
+  lite.reserved = 0; // reservedはコピーしない
+  return lite;
+}
+
+twai_frame_header_t ESP32CanFD::from_lite(const TWAI_FRAME_HEADER& lite) {
+  twai_frame_header_t header;
+  header.id = lite.id;
+  header.dlc = lite.dlc;
+  header.ide = lite.ide;
+  header.rtr = lite.rtr;
+  header.fdf = lite.fdf;
+  header.brs = lite.brs;
+  header.esi = lite.esi;
+  // reservedは無視
+  return header;
 }

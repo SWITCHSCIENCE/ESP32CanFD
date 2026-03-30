@@ -5,11 +5,6 @@
 #include "esp_twai.h"
 #include "esp_twai_onchip.h"
 
-/* 送信フォーマット指定用内部定数 */
-#define CAN_FMT_AUTO -1    // データ長で自動切替
-#define CAN_FMT_CLASSIC 0  // Classic CAN強制
-#define CAN_FMT_FD 1       // CAN FD強制
-
 typedef struct twai_frame_header_lite_t {
   uint32_t id;        /* 11bit or 29bit CAN ID */
   uint8_t dlc;        /* 0–64 */
@@ -163,18 +158,13 @@ private:
   static const size_t TX_RING_SIZE = 1024;
   uint8_t _txRingBuffer[TX_RING_SIZE];
   size_t _txBufferIdx;
-  size_t _head = 0;
-  volatile size_t _used_count = 0;
+  size_t _txHead = 0;
+  volatile size_t _txUsed = 0;
 
   QueueHandle_t _tx_len_queue;
   SemaphoreHandle_t _tx_buf_sem;
 
-  struct {
-    uint32_t id;
-    int format;
-    bool brs;
-    bool extended;
-  } _txPacketInfo;
+  TWAI_FRAME_HEADER _txHeader;
 
   // 受信バッファと情報
   QueueHandle_t _rx_queue;
@@ -187,6 +177,9 @@ private:
   friend bool IRAM_ATTR app_twai_rx_done_callback(twai_node_handle_t handle, const twai_rx_done_event_data_t* edata, void* user_ctx);
   friend bool IRAM_ATTR app_twai_state_change_callback(twai_node_handle_t handle, const twai_state_change_event_data_t* edata, void* user_ctx);
   friend bool IRAM_ATTR app_twai_error_callback(twai_node_handle_t handle, const twai_error_event_data_t* edata, void* user_ctx);
+
+  TWAI_FRAME_HEADER to_lite(const twai_frame_header_t& header);
+  twai_frame_header_t from_lite(const TWAI_FRAME_HEADER& lite);
 };
 
 #endif
