@@ -9,8 +9,8 @@ static const char* TAG = "ESP32CanFD";
 // ISRからメインメモリへデータを渡すための構造体
 typedef struct {
  TWAI_FRAME_HEADER header;
- size_t offset; // _rxRingBuffer 内の開始位置
-} rx_meta_t;
+ uint16_t offset; // _rxRingBuffer 内の開始位置
+} __attribute__((packed)) rx_meta_t;
 
 // --- ISRコールバック群 ---
 
@@ -51,7 +51,7 @@ bool IRAM_ATTR app_twai_rx_done_callback(twai_node_handle_t handle, const twai_r
     meta.header.fdf = rx_frame.header.fdf;
     meta.header.brs = rx_frame.header.brs;
     meta.header.esi = rx_frame.header.esi;
-    meta.offset = self->_rx_head;
+    meta.offset = (uint16_t)self->_rx_head;
     BaseType_t high_task_awoken = pdFALSE;
     if (xQueueSendFromISR(self->_rx_queue, &meta, &high_task_awoken) == pdTRUE) {
       // 書き込み位置を更新（FDの物理長に合わせて進める）

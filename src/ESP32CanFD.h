@@ -12,15 +12,15 @@
 
 typedef struct twai_frame_header_lite_t {
   uint32_t id;        /* 11bit or 29bit CAN ID */
-  uint16_t dlc;       /* 0–64 */
-  uint16_t ide : 1;   /* Extended ID */
-  uint16_t rtr : 1;   /* Remote frame */
-  uint16_t fdf : 1;   /* CAN FD frame */
-  uint16_t brs : 1;   /* Bit Rate Switch */
-  uint16_t esi : 1;   /* Error State Indicator */
-};
+  uint8_t dlc;        /* 0–64 */
+  uint8_t ide : 1;    /* Extended ID */
+  uint8_t rtr : 1;    /* Remote frame */
+  uint8_t fdf : 1;    /* CAN FD frame */
+  uint8_t brs : 1;    /* Bit Rate Switch */
+  uint8_t esi : 1;    /* Error State Indicator */
+  uint8_t reserved : 3;
+} __attribute__((packed));
 
-// #define TWAI_FRAME_HEADER twai_frame_header_t
 #define TWAI_FRAME_HEADER twai_frame_header_lite_t
 
 class ESP32CanFD : public Stream {
