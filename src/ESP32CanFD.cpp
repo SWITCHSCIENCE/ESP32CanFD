@@ -178,7 +178,7 @@ bool ESP32CanFD::recover() {
 
 // --- フィルタ設定 ---
 
-bool ESP32CanFD::setFilter(uint8_t filterId, uint32_t id, uint32_t mask, bool isExtended) {
+bool ESP32CanFD::setFilterMask(uint8_t filterId, uint32_t id, uint32_t mask, bool isExtended) {
   if (!_node_handle) return false;
   twai_mask_filter_config_t cfg = { .id = id, .mask = mask, .is_ext = isExtended };
   twai_node_disable(_node_handle);
@@ -187,7 +187,7 @@ bool ESP32CanFD::setFilter(uint8_t filterId, uint32_t id, uint32_t mask, bool is
   return err == ESP_OK;
 }
 
-bool ESP32CanFD::setDualFilter(uint8_t filterId, uint32_t id1, uint32_t mask1, uint32_t id2, uint32_t mask2, bool isExtended) {
+bool ESP32CanFD::setFilterDual(uint8_t filterId, uint32_t id1, uint32_t mask1, uint32_t id2, uint32_t mask2, bool isExtended) {
   if (!_node_handle) return false;
   twai_mask_filter_config_t cfg = twai_make_dual_filter(id1, mask1, id2, mask2, isExtended);
   twai_node_disable(_node_handle);
@@ -196,7 +196,7 @@ bool ESP32CanFD::setDualFilter(uint8_t filterId, uint32_t id1, uint32_t mask1, u
   return err == ESP_OK;
 }
 
-bool ESP32CanFD::setRangeFilter(uint8_t filterId, uint32_t lowId, uint32_t highId, bool isExtended) {
+bool ESP32CanFD::setFilterRange(uint8_t filterId, uint32_t lowId, uint32_t highId, bool isExtended) {
   if (!_node_handle) return false;
   twai_range_filter_config_t cfg = { .range_low = lowId, .range_high = highId, .is_ext = isExtended };
   twai_node_disable(_node_handle);
@@ -319,32 +319,9 @@ int ESP32CanFD::endPacket() {
   return result;
 }
 
-int ESP32CanFD::request(uint32_t id, uint8_t dlc, bool extended) {
-  if (!_node_handle) return 0;
-
-  twai_frame_t tx_msg = {};
-  tx_msg.header.id = id;
-  tx_msg.header.ide = (id > 0x7FF) ? true : extended;
-  tx_msg.header.rtr = 1;
-  tx_msg.header.dlc = (dlc > 8) ? 8 : dlc;
-
-  // RTRはデータを伴わないため、リングバッファの空き待ち（beginPacket）を介さず
-  // 直接クリティカルセクションに入って送信できる。
-  int result = 0;
-  portENTER_CRITICAL(&_mux);
-  if (twai_node_transmit(_node_handle, &tx_msg, 0) == ESP_OK) {
-    size_t footprint = 0;
-    xQueueSendFromISR(_tx_len_queue, &footprint, NULL);
-    result = 1;
-  }
-  portEXIT_CRITICAL(&_mux);
-
-  return result;
-}
-
 // --- 受信・状態取得 ---
 
-int ESP32CanFD::parsePacket() {
+bool ESP32CanFD::parsePacket() {
   if (!_rx_queue) return 0;
   rx_meta_t meta;
   if (xQueueReceive(_rx_queue, &meta, 0) == pdTRUE) {
@@ -352,9 +329,9 @@ int ESP32CanFD::parsePacket() {
     _rxLength = _rxHeader.fdf ? twaifd_dlc2len(_rxHeader.dlc) : min((int)_rxHeader.dlc, 8);
     _rxDataPtr = &_rxRingBuffer[meta.offset];
     _rxBufferIdx = 0;
-    return _rxLength ? _rxLength : _rxHeader.rtr;
+    return true;
   }
-  return 0;
+  return false;
 }
 
 int ESP32CanFD::available() {

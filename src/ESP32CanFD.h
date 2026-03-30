@@ -78,19 +78,9 @@ public:
   using Stream::write;
   int endPacket();
 
-  /**
-   * リモートフレーム(RTR)の送信
-   * CAN FD仕様により、RTRは常にClassic CANフォーマットで送信されます。
-   * @param id       要求するメッセージのID
-   * @param dlc      要求するデータの長さ (0〜8)
-   * @param extended true(デフォルト): 29bit ID, false: 11bit ID (ID > 0x7FFの場合は強制的にtrue)
-   * @return 1(成功), 0(失敗)
-   */
-  int request(uint32_t id, uint8_t dlc = 0, bool extended = true);
-
   /* ------------------- 受信関連 (Stream実装) ------------------- */
 
-  int parsePacket();  // 受信パケットの確認。あればデータ長を返す
+  bool parsePacket();  // 受信パケットの確認。あればデータ長を返す
   virtual int read() override;
   virtual int available() override;
   virtual int peek() override;
@@ -109,18 +99,17 @@ public:
    * マスクフィルタの設定
    * @param filterId 0〜(SOC_TWAI_MASK_FILTER_NUM-1)
    */
-  bool setFilter(uint8_t filterId, uint32_t id, uint32_t mask, bool isExtended = true);
+  bool setFilterMask(uint8_t filterId, uint32_t id, uint32_t mask, bool isExtended = false);
 
   /**
    * 2つのIDを個別に通すフィルタの設定 (Dual Filterモード)
    */
-  bool setDualFilter(uint8_t filterId, uint32_t id1, uint32_t mask1, uint32_t id2, uint32_t mask2, bool isExtended = true);
+  bool setFilterDual(uint8_t filterId, uint32_t id1, uint32_t mask1, uint32_t id2, uint32_t mask2, bool isExtended = false);
 
   /**
    * 指定したID範囲を通すフィルタの設定 (Range Filter)
-   * ※ハードウェアが対応している場合のみ。SOC_TWAI_SUPPORT_FDチップ等。
    */
-  bool setRangeFilter(uint8_t filterId, uint32_t lowId, uint32_t highId, bool isExtended = true);
+  bool setFilterRange(uint8_t filterId, uint32_t lowId, uint32_t highId, bool isExtended = false);
 
   /* ノード状態の取得 */
   bool isBusOff() {

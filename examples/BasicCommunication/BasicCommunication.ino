@@ -51,14 +51,13 @@ void loop() {
   }
 
   // --- 受信処理 ---
-  int packetSize = CANFD.parsePacket();
-  if (packetSize) {
+  if (CANFD.parsePacket()) {
     Serial.print("Received ");
     if (CANFD.packetFdf()) Serial.print("CAN-FD ");
     else Serial.print("Classic ");
 
     Serial.printf("Packet: ID=0x%X, DLC=%d, Size=%d\n",
-                  CANFD.packetId(), CANFD.packetDlc(), packetSize);
+                  CANFD.packetId(), CANFD.packetDlc(), CANFD.available());
 
     Serial.print("Data: ");
     while (CANFD.available()) {
